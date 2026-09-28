@@ -1,0 +1,133 @@
+{
+  "schema_version": 20,
+  "standard_lib_version": 65,
+  "action_runtime_version": "v0.7.4",
+  "name": "ThreatCluster \u2014 ransomware watch for your sector",
+  "description": "Posts to Slack whenever a ransomware group lists a new victim in your sector. Uses the ThreatCluster API (free tier is enough). Set the schedule on the first action, put your API key in a credential named `threatcluster`, and point the last action at your Slack webhook.",
+  "guid": "tc-ransomware-sector-watch",
+  "exported_at": "2026-09-06T00:00:00Z",
+  "agents": [
+    {
+      "type": "eventTransformation",
+      "name": "Every day at 8am",
+      "disabled": false,
+      "description": "Schedule: set this agent to run daily. Tines schedules live on the agent, not in the JSON.",
+      "options": {
+        "mode": "message_only",
+        "payload": {
+          "run": "daily"
+        }
+      },
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "type": "httpRequest",
+      "name": "Get new leak-site victims",
+      "disabled": false,
+      "description": "Change `sector` to yours, or drop it for everything. `days=1` plus a daily schedule means each listing is seen once. Costs 1 credit.",
+      "options": {
+        "url": "https://threatcluster.io/api/public/v1/darkweb/ransomware/victims?days=1&sector=Healthcare&limit=100",
+        "content_type": "json",
+        "method": "get",
+        "headers": {
+          "X-API-Key": "{{ CREDENTIAL.threatcluster }}"
+        },
+        "log_error_on_status": [
+          400,
+          401,
+          403,
+          429,
+          500
+        ]
+      },
+      "position": {
+        "x": 0,
+        "y": 165
+      }
+    },
+    {
+      "type": "eventTransformation",
+      "name": "Split victims",
+      "disabled": false,
+      "description": "One event per listing so the rest of the story handles them individually.",
+      "options": {
+        "mode": "explode",
+        "path": "get_new_leak_site_victims.body.victims",
+        "to": "victim"
+      },
+      "position": {
+        "x": 0,
+        "y": 330
+      }
+    },
+    {
+      "type": "trigger",
+      "name": "Only new ones",
+      "disabled": false,
+      "description": "Skip listings the group has already taken down.",
+      "options": {
+        "rules": [
+          {
+            "type": "field_is_not_present",
+            "path": "<<victim.delisted>>",
+            "value": "true"
+          }
+        ]
+      },
+      "position": {
+        "x": 0,
+        "y": 495
+      }
+    },
+    {
+      "type": "eventTransformation",
+      "name": "Format for Slack",
+      "disabled": false,
+      "description": "Build the message. Edit the wording here.",
+      "options": {
+        "mode": "message_only",
+        "payload": {
+          "text": "*<<victim.group>>* listed *<<victim.name>>*",
+          "blocks": [
+            {
+              "type": "section",
+              "text": {
+                "type": "mrkdwn",
+                "text": "*<<victim.group>>* has listed *<<victim.name>>*\\n<<victim.sector>> \u00b7 <<victim.country>> \u00b7 first seen <<victim.discovered>>\\n_A leak-site listing is a claim by the group, not a confirmed breach._"
+              }
+            }
+          ]
+        }
+      },
+      "position": {
+        "x": 0,
+        "y": 660
+      }
+    }
+  ],
+  "diagram_notes": [],
+  "links": [
+    {
+      "source": 0,
+      "receiver": 1
+    },
+    {
+      "source": 1,
+      "receiver": 2
+    },
+    {
+      "source": 2,
+      "receiver": 3
+    },
+    {
+      "source": 3,
+      "receiver": 4
+    }
+  ],
+  "form": null,
+  "identifier": "tc-ransomware-sector-watch",
+  "keep_events_for": 604800
+}

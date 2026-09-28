@@ -1,0 +1,127 @@
+{
+  "schema_version": 20,
+  "standard_lib_version": 65,
+  "action_runtime_version": "v0.7.4",
+  "name": "ThreatCluster \u2014 IOC blocklist sync",
+  "description": "Pulls validated indicators every few hours and pushes them into a firewall, proxy or SIEM lookup table. Indicators are validated on ingest and re-checked against a false-positive list, so the feed stays quiet enough to block on.",
+  "guid": "tc-ioc-blocklist-sync",
+  "exported_at": "2026-09-06T00:00:00Z",
+  "agents": [
+    {
+      "type": "eventTransformation",
+      "name": "Every 6 hours",
+      "disabled": false,
+      "description": "Schedule this agent every 6 hours.",
+      "options": {
+        "mode": "message_only",
+        "payload": {
+          "run": "6h"
+        }
+      },
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "type": "httpRequest",
+      "name": "Get validated IOCs",
+      "disabled": false,
+      "description": "Indicators validated on ingest, from the last 6 hours. `confidence=confirmed` excludes anything unreviewed. Costs 3 credits.",
+      "options": {
+        "url": "https://threatcluster.io/api/public/v1/iocs/feed?format=json&types=all&hours=6&confidence=confirmed",
+        "content_type": "json",
+        "method": "get",
+        "headers": {
+          "X-API-Key": "{{ CREDENTIAL.threatcluster }}"
+        },
+        "log_error_on_status": [
+          400,
+          401,
+          403,
+          429,
+          500
+        ]
+      },
+      "position": {
+        "x": 0,
+        "y": 165
+      }
+    },
+    {
+      "type": "eventTransformation",
+      "name": "Split indicators",
+      "disabled": false,
+      "description": "One event per indicator.",
+      "options": {
+        "mode": "explode",
+        "path": "get_validated_iocs.body.iocs",
+        "to": "ioc"
+      },
+      "position": {
+        "x": 0,
+        "y": 330
+      }
+    },
+    {
+      "type": "trigger",
+      "name": "Skip anything already blocked",
+      "disabled": false,
+      "description": "Replace with a lookup against your blocklist so you only push new values.",
+      "options": {
+        "rules": [
+          {
+            "type": "field_is_not_present",
+            "path": "<<ioc.value>>",
+            "value": ""
+          }
+        ]
+      },
+      "position": {
+        "x": 0,
+        "y": 495
+      }
+    },
+    {
+      "type": "eventTransformation",
+      "name": "Format for your SIEM or firewall",
+      "disabled": false,
+      "description": "Shape the row, then add an HTTP Request action that writes it to your tool.",
+      "options": {
+        "mode": "message_only",
+        "payload": {
+          "indicator": "<<ioc.value>>",
+          "type": "<<ioc.type>>",
+          "source": "ThreatCluster",
+          "reason": "<<ioc.reason>>"
+        }
+      },
+      "position": {
+        "x": 0,
+        "y": 660
+      }
+    }
+  ],
+  "diagram_notes": [],
+  "links": [
+    {
+      "source": 0,
+      "receiver": 1
+    },
+    {
+      "source": 1,
+      "receiver": 2
+    },
+    {
+      "source": 2,
+      "receiver": 3
+    },
+    {
+      "source": 3,
+      "receiver": 4
+    }
+  ],
+  "form": null,
+  "identifier": "tc-ioc-blocklist-sync",
+  "keep_events_for": 604800
+}
